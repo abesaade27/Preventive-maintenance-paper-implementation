@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Preventive Maintenance Policy Governance — Agentic Dashboard</title>
+<style>
+  :root {
+    --surface-2: #ffffff; --surface-1: #f6f5f1; --surface-0: #edece6;
+    --text-primary: #14140f; --text-secondary: #5a5952; --text-muted: #8f8e86;
+    --border: rgba(20,20,15,0.09); --radius: 10px;
+    --font-mono: "SFMono-Regular", Consolas, monospace;
+    --accent: #1f5fa8; --accent2: #c9601f; --accent3: #1d7a4c;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: var(--surface-0); color: var(--text-primary); margin: 0; padding: 2.5rem 1.5rem; }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  .masthead { margin-bottom: 1.75rem; }
+  .masthead .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+  h1 { font-size: 22px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--text-secondary); font-size: 13.5px; margin: 0; max-width: 720px; line-height: 1.55; }
+
+  .panel { background: var(--surface-2); border-radius: 14px; padding: 1.5rem 1.75rem; margin-bottom: 1.25rem; box-shadow: 0 1px 2px rgba(20,20,15,0.04); }
+  .panel h2 { font-size: 13px; font-weight: 650; margin: 0 0 1rem; color: var(--text-primary); display:flex; align-items:center; gap:8px; }
+  .panel h2 .stepnum { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--surface-1); color:var(--text-secondary); font-size:11px; font-weight:700; }
+
+  label { font-size: 10.5px; color: var(--text-secondary); display:block; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  input { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-family: var(--font-mono); background: var(--surface-2); }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+  button { padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-primary); transition: background 0.12s; }
+  button:hover { background: var(--surface-0); }
+  button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  button.primary:hover { background: #184c88; }
+  .btnrow { display: flex; gap: 10px; margin-top: 1.25rem; flex-wrap: wrap; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; }
+  .field-note { font-size: 11.5px; color: var(--text-muted); margin: 8px 0 0; line-height: 1.5; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; }
+  .kpi { background: var(--surface-1); border-radius: 10px; padding: 1rem 1.1rem; }
+  .kpi .label { font-size: 10.5px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 6px; }
+  .kpi .value { font-size: 23px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .kpi .value.blue { color: var(--accent); }
+  .kpi .value.orange { color: var(--accent2); }
+
+  #log-panel { background: var(--surface-1); border-radius: 10px; padding: 14px 16px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.7; max-height: 280px; overflow-y: auto; }
+  #log-panel .conv-tag { color: var(--text-muted); display:inline-block; width: 58px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-family: var(--font-mono); }
+  th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 650; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; }
+  tbody tr:hover { background: var(--surface-1); }
+  .policy-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 650; }
+  .policy-pill.op { background: #e4eefb; color: var(--accent); }
+  .policy-pill.cal { background: #fbe9dc; color: var(--accent2); }
+
+  .chart-wrap { position: relative; height: 250px; margin: 0.25rem 0; }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .legend { display: flex; gap: 18px; font-size: 12px; color: var(--text-secondary); margin: 10px 0 0; flex-wrap: wrap; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+  .tablewrap { overflow-x: auto; }
+  .subnote { font-size: 12px; color: var(--text-muted); margin: 0 0 1rem; line-height: 1.5; }
+
+  @media (max-width: 720px) {
+    .chart-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <p class="eyebrow">Maintenance 4.0 · Agentic Decision Support</p>
+    <h1>Preventive Maintenance Policy Governance</h1>
+    <p class="sub">
+      A closed-loop multi-agent system that ingests censored maintenance data, re-estimates asset reliability under
+      right-censoring, and recomputes the economically optimal preventive interval every cycle — balancing a
+      calendar-based and an operating-time-based replacement policy under evolving cost and failure conditions.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2><span class="stepnum">1</span>Scenario configuration</h2>
+    <div class="grid">
+      <div><label>Initial preventive interval (Tp)</label><input type="number" id="in-tp" value="25" step="1"/></div>
+      <div><label>Corrective unit cost (Cc)</label><input type="number" id="in-cc" value="250" step="5"/></div>
+      <div><label>Units observed / cycle</label><input type="number" id="in-nunits" value="50" min="10" max="500" step="10"/></div>
+      <div><label>Review cycles</label><input type="number" id="in-nconv" value="10" min="4" max="20" step="1"/></div>
+      <div><label>Regime shift at cycle</label><input type="number" id="in-switch" value="6" min="2" max="19" step="1"/></div>
+      <div><label>Random seed</label><input type="number" id="in-seed" value="1" step="1"/></div>
+    </div>
+    <div style="margin-top:12px;">
+      <label>Preventive cost per cycle (Cp) — comma-separated</label>
+      <input type="text" id="in-cpschedule" value="20.0,45.6,71.1,96.7,122.2,147.8,173.3,198.9,224.4,250.0"/>
+      <p class="field-note">Rising preventive cost trajectory across review cycles, reflecting labour, logistics, or opportunity-cost drift.</p>
+    </div>
+    <div class="btnrow">
+      <button class="primary" id="run-btn">Run policy review</button>
+      <button id="reset-btn">Reset to defaults</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="stepnum">2</span>Outcome summary</h2>
+    <div id="summary" class="kpi-grid"></div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="stepnum">3</span>Agent activity log</h2>
+    <p class="subnote">Agents communicate only through published messages routed by the broker — Scenario &rarr; Fitting &rarr; Optimizer &rarr; Explainer &rarr; Orchestrator — never by calling each other directly.</p>
+    <div id="log-panel"></div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="stepnum">4</span>Per-cycle results</h2>
+    <div class="tablewrap"><table id="results-table"></table></div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="stepnum">5</span>Reliability re-estimation</h2>
+    <p class="subnote">Fitted Weibull shape (β̂) and scale (η̂) parameters, re-estimated from right-censored data at every review cycle.</p>
+    <div class="chart-row">
+      <div class="chart-wrap"><canvas id="chart-beta"></canvas></div>
+      <div class="chart-wrap"><canvas id="chart-eta"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="stepnum">6</span>Preventive interval &amp; policy selection</h2>
+    <div class="chart-row">
+      <div class="chart-wrap"><canvas id="chart-tp"></canvas></div>
+      <div class="chart-wrap"><canvas id="chart-dominant"></canvas></div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:#1f5fa8;"></span>operating-time-based</span>
+      <span><span class="dot" style="background:#c9601f;"></span>calendar-based</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="stepnum">7</span>Data censoring</h2>
+    <div class="chart-wrap"><canvas id="chart-censoring"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="stepnum">8</span>Cost-ratio sensitivity</h2>
+    <p class="subnote">Optimal preventive interval and normalised cost rate as the preventive/corrective cost ratio (Cp/Cc) varies, holding the current fitted reliability model fixed.</p>
+    <div class="chart-wrap"><canvas id="chart-sensitivity"></canvas></div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+/* ---------- seeded RNG ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296;};}
+
+/* ---------- reliability math ---------- */
+function R(t,beta,eta){return Math.exp(-Math.pow(t/eta,beta));}
+function weibullPdf(t,beta,eta){if(t<=0)t=1e-9;const z=t/eta;return (beta/eta)*Math.pow(z,beta-1)*Math.exp(-Math.pow(z,beta));}
+function weibullCdf(t,beta,eta){return 1-Math.exp(-Math.pow(t/eta,beta));}
+
+// CTE_operating(Tp) = [Cp*R(Tp)+Cc*F(Tp)] / [Tp*R(Tp)+M(Tp)*F(Tp)]; denominator computed via the equivalent
+// closed identity int_0^Tp R(t) dt = Tp*R(Tp) + M(Tp)*F(Tp).
+function integrateR(Tp,beta,eta,n){n=n||100;const h=Tp/n;let sum=0;for(let i=0;i<=n;i++){const t=i*h;const w=(i===0||i===n)?0.5:1;sum+=w*R(t,beta,eta);}return sum*h;}
+function cetOperating(Tp,beta,eta,Cp,Cc){const Rp=R(Tp,beta,eta),Fp=1-Rp;const denom=Math.max(integrateR(Tp,beta,eta),1e-9);return (Cp*Rp+Cc*Fp)/denom;}
+
+// CTE_calendar(Tp) = [Cp+Cc*N(Tp)]/Tp ; N(Tp) = renewal function, solved from the renewal integral equation
+function renewalFunction(Tp,beta,eta,n){n=n||80;const h=Tp/n;const f=new Array(n+1),Fc=new Array(n+1);for(let i=0;i<=n;i++){const t=i*h;f[i]=weibullPdf(t,beta,eta);Fc[i]=weibullCdf(t,beta,eta);}const N=new Array(n+1).fill(0);for(let i=1;i<=n;i++){let conv=0;for(let j=1;j<=i;j++){conv+=N[i-j]*f[j]*h;}N[i]=Fc[i]+conv;}return N[n];}
+function cetCalendar(Tp,beta,eta,Cp,Cc){const N=renewalFunction(Tp,beta,eta);return (Cp+Cc*N)/Tp;}
+
+function optimizePolicy(beta,eta,Cp,Cc){
+  const tMax=Math.max(10*eta,50);const nCand=50;
+  let bestOp=null,bestCal=null;
+  for(let i=1;i<=nCand;i++){
+    const Tp=tMax*i/nCand;
+    const cOp=cetOperating(Tp,beta,eta,Cp,Cc);
+    const cCal=cetCalendar(Tp,beta,eta,Cp,Cc);
+    if(!bestOp||cOp<bestOp.cte)bestOp={Tp,cte:cOp};
+    if(!bestCal||cCal<bestCal.cte)bestCal={Tp,cte:cCal};
+  }
+  const dominant=bestOp.cte<=bestCal.cte?"oper_time_based":"calendar_based";
+  const TpStar=dominant==="oper_time_based"?bestOp.Tp:bestCal.Tp;
+  const cteStar=dominant==="oper_time_based"?bestOp.cte:bestCal.cte;
+  return {TpOp:bestOp.Tp,cteOp:bestOp.cte,TpCal:bestCal.Tp,cteCal:bestCal.cte,dominant,TpStar,cteStar};
+}
+
+function weibullMLE(failures,censors){
+  function negLL(beta,eta){let ll=0;for(const t of failures){const z=t/eta;ll+=Math.log(beta/eta)+(beta-1)*Math.log(z)-Math.pow(z,beta);}for(const t of censors){const zc=t/eta;ll+=-Math.pow(zc,beta);}return -ll;}
+  function search(bLo,bHi,eLo,eHi,steps){let best=null;for(let i=0;i<=steps;i++){const beta=bLo+(bHi-bLo)*i/steps;if(beta<=0.02)continue;for(let j=0;j<=steps;j++){const eta=eLo+(eHi-eLo)*j/steps;if(eta<=0.5)continue;const val=negLL(beta,eta);if(!best||val<best.val)best={beta,eta,val};}}return best;}
+  let r=search(0.2,4.5,3,80,25);
+  for(let it=0;it<3;it++){const bw=4.3/25*2,ew=77/25*2;r=search(Math.max(0.05,r.beta-bw),r.beta+bw,Math.max(1,r.eta-ew),r.eta+ew,25);}
+  return r;
+}
+
+/* ---------- five-agent simulation loop ---------- */
+function runSimulation(p){
+  const rng=mulberry32(p.seed);
+  let Tp=p.tpInit;
+  const results=[],log=[];
+  for(let conv=1;conv<=p.nConv;conv++){
+    const Cp=p.cpSchedule[Math.min(conv-1,p.cpSchedule.length-1)];
+    const betaTrue=conv<p.phaseSwitch?2.0:0.6;
+    const etaTrue=20.0;
+    log.push({conv,text:"Orchestrator &rarr; Scenario &nbsp;[REQUEST_SCENARIO]&nbsp; Tp="+Tp.toFixed(2)+" Cp="+Cp.toFixed(1)});
+    const raw=[];
+    for(let i=0;i<p.nUnits;i++){raw.push(etaTrue*Math.pow(-Math.log(1-rng()),1/betaTrue));}
+    const failures=raw.filter(t=>t<=Tp);
+    const nCensored=p.nUnits-failures.length;
+    const censors=new Array(nCensored).fill(Tp);
+    const censoringFrac=nCensored/p.nUnits;
+    log.push({conv,text:"Scenario &rarr; Fitting &nbsp;[SCENARIO]&nbsp; "+failures.length+" failures, "+nCensored+" censored ("+(censoringFrac*100).toFixed(1)+"%)"});
+    let betaHat=1.5,etaHat=Math.max(Tp,5);
+    if(failures.length>=3){const fit=weibullMLE(failures,censors);betaHat=fit.beta;etaHat=fit.eta;}
+    log.push({conv,text:"Fitting &rarr; Optimizer &nbsp;[FIT_RESULT]&nbsp; beta_hat="+betaHat.toFixed(3)+" eta_hat="+etaHat.toFixed(3)});
+    const opt=optimizePolicy(betaHat,etaHat,Cp,p.cc);
+    log.push({conv,text:"Optimizer &rarr; Orchestrator/Explainer &nbsp;[POLICY]&nbsp; "+opt.dominant+" &nbsp;Tp*="+opt.TpStar.toFixed(2)+" &nbsp;CTE*="+opt.cteStar.toFixed(3)});
+    log.push({conv,text:"Explainer &rarr; Orchestrator &nbsp;[EXPLANATION]&nbsp; selected "+opt.dominant+" at Tp="+opt.TpStar.toFixed(2)+" balancing reliability and cost"});
+    results.push({conv,phase:conv<p.phaseSwitch?"Phase 1":"Phase 2",betaTrue,etaTrue,betaHat,etaHat,Cp,Cc:p.cc,TpUsed:Tp,TpOp:opt.TpOp,cteOp:opt.cteOp,TpCal:opt.TpCal,cteCal:opt.cteCal,dominant:opt.dominant,TpStar:opt.TpStar,censoringFrac});
+    Tp=opt.TpStar;
+  }
+  return {results,log};
+}
+
+function readParams(){
+  return {
+    tpInit:parseFloat(document.getElementById("in-tp").value),
+    cc:parseFloat(document.getElementById("in-cc").value),
+    nUnits:parseInt(document.getElementById("in-nunits").value),
+    nConv:parseInt(document.getElementById("in-nconv").value),
+    phaseSwitch:parseInt(document.getElementById("in-switch").value),
+    seed:parseInt(document.getElementById("in-seed").value),
+    cpSchedule:document.getElementById("in-cpschedule").value.split(",").map(s=>parseFloat(s.trim())),
+  };
+}
+
+let charts={};
+function destroyCharts(){Object.values(charts).forEach(c=>c&&c.destroy());charts={};}
+
+function policyPill(d){
+  return d==="oper_time_based"
+    ? '<span class="policy-pill op">operating-time</span>'
+    : '<span class="policy-pill cal">calendar</span>';
+}
+
+function render(results,log){
+  const summary=document.getElementById("summary");
+  const flips=results.filter((r,i)=>i>0&&r.dominant!==results[i-1].dominant).length;
+  const avgCensor=results.reduce((a,r)=>a+r.censoringFrac,0)/results.length*100;
+  const finalPolicy=results[results.length-1].dominant==="oper_time_based"?"Operating-time":"Calendar";
+  summary.innerHTML=
+    '<div class="kpi"><p class="label">Review cycles completed</p><p class="value">'+results.length+"</p></div>"+
+    '<div class="kpi"><p class="label">Policy revisions</p><p class="value">'+flips+"</p></div>"+
+    '<div class="kpi"><p class="label">Current interval (Tp*)</p><p class="value blue">'+results[results.length-1].TpStar.toFixed(1)+"</p></div>"+
+    '<div class="kpi"><p class="label">Current policy</p><p class="value orange">'+finalPolicy+"</p></div>"+
+    '<div class="kpi"><p class="label">Avg. censoring</p><p class="value">'+avgCensor.toFixed(1)+"%</p></div>";
+
+  document.getElementById("log-panel").innerHTML=log.map(l=>
+    '<div style="padding:2px 0;"><span class="conv-tag">cycle '+l.conv+"</span>"+l.text+"</div>").join("");
+
+  const table=document.getElementById("results-table");
+  let html="<tr><th>Cycle</th><th>Phase</th><th>&beta;&#770;</th><th>&eta;&#770;</th><th>Cp</th>"+
+    "<th>Tp calendar</th><th>Tp operating</th><th>Selected Tp*</th><th>Policy</th></tr>";
+  results.forEach(r=>{
+    html+="<tr>"+
+      "<td>"+r.conv+"</td><td>"+r.phase+"</td>"+
+      "<td>"+r.betaHat.toFixed(3)+"</td><td>"+r.etaHat.toFixed(2)+"</td><td>"+r.Cp.toFixed(1)+"</td>"+
+      "<td>"+r.TpCal.toFixed(2)+"</td><td>"+r.TpOp.toFixed(2)+"</td><td><strong>"+r.TpStar.toFixed(2)+"</strong></td>"+
+      "<td>"+policyPill(r.dominant)+"</td>"+
+      "</tr>";
+  });
+  table.innerHTML=html;
+
+  destroyCharts();
+  const labels=results.map(r=>"C"+r.conv);
+  const trueBeta=results.map(r=>r.betaTrue), trueEta=results.map(r=>r.etaTrue);
+
+  charts.beta=new Chart(document.getElementById("chart-beta"),{type:"line",data:{labels,datasets:[
+    {label:"true \u03B2",data:trueBeta,borderColor:"#b7b6ae",borderDash:[4,4],pointRadius:0,fill:false},
+    {label:"fitted \u03B2\u0302",data:results.map(r=>r.betaHat),borderColor:"#1f5fa8",backgroundColor:"#1f5fa8",pointRadius:3,fill:false,tension:0.15},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{font:{size:11}}}},scales:{y:{title:{display:true,text:"beta"}}}}});
+
+  charts.eta=new Chart(document.getElementById("chart-eta"),{type:"line",data:{labels,datasets:[
+    {label:"true \u03B7",data:trueEta,borderColor:"#b7b6ae",borderDash:[4,4],pointRadius:0,fill:false},
+    {label:"fitted \u03B7\u0302",data:results.map(r=>r.etaHat),borderColor:"#1f5fa8",backgroundColor:"#1f5fa8",pointRadius:3,fill:false,tension:0.15},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{font:{size:11}}}},scales:{y:{title:{display:true,text:"eta"}}}}});
+
+  charts.tp=new Chart(document.getElementById("chart-tp"),{type:"line",data:{labels,datasets:[
+    {label:"Interval in force",data:results.map(r=>r.TpUsed),borderColor:"#1f5fa8",pointRadius:3,fill:false,tension:0.15},
+    {label:"Optimal (calendar)",data:results.map(r=>r.TpCal),borderColor:"#c9601f",pointRadius:2,fill:false,tension:0.15},
+    {label:"Optimal (operating)",data:results.map(r=>r.TpOp),borderColor:"#1d7a4c",pointRadius:2,fill:false,tension:0.15},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{font:{size:11}}}},scales:{y:{title:{display:true,text:"Tp"}}}}});
+
+  charts.dominant=new Chart(document.getElementById("chart-dominant"),{type:"bar",data:{labels,datasets:[{
+    label:"Selected Tp*",data:results.map(r=>r.TpStar),
+    backgroundColor:results.map(r=>r.dominant==="oper_time_based"?"#1f5fa8":"#c9601f"),
+    borderRadius:4,
+  }]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:"Tp* by selected policy"}}}}});
+
+  charts.censoring=new Chart(document.getElementById("chart-censoring"),{type:"line",data:{labels,datasets:[
+    {label:"censoring %",data:results.map(r=>r.censoringFrac*100),borderColor:"#1f5fa8",pointRadius:3,fill:true,backgroundColor:"rgba(31,95,168,0.08)",tension:0.15}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:"censoring (%)"}}}}});
+
+  const phase1=results.filter(r=>r.phase==="Phase 1");
+  const betaP1=phase1.reduce((a,r)=>a+r.betaHat,0)/Math.max(phase1.length,1)||2.0;
+  const etaP1=phase1.reduce((a,r)=>a+r.etaHat,0)/Math.max(phase1.length,1)||20.0;
+  const Cc=results[0].Cc;
+  const ratios=[]; const TpStars=[]; const CTEnorm=[];
+  let base=null;
+  for(let i=0;i<12;i++){
+    const ratio=0.1+i*(0.5/11);
+    const res=optimizePolicy(betaP1,etaP1,ratio*Cc,Cc);
+    ratios.push(ratio.toFixed(2)); TpStars.push(res.TpStar);
+    if(base===null)base=res.cteStar;
+    CTEnorm.push(res.cteStar/base);
+  }
+  charts.sensitivity=new Chart(document.getElementById("chart-sensitivity"),{type:"line",data:{labels:ratios,datasets:[
+    {label:"Optimal Tp*",data:TpStars,borderColor:"#1f5fa8",pointRadius:3,yAxisID:"y",fill:false,tension:0.15},
+    {label:"Normalised cost rate",data:CTEnorm,borderColor:"#c9601f",borderDash:[4,4],pointRadius:2,yAxisID:"y1",fill:false,tension:0.15},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{font:{size:11}}}},
+    scales:{x:{title:{display:true,text:"Cp / Cc"}},y:{type:"linear",position:"left",title:{display:true,text:"Optimal Tp*"}},
+             y1:{type:"linear",position:"right",title:{display:true,text:"Normalised cost rate"},grid:{drawOnChartArea:false}}}}});
+}
+
+function doRun(){
+  const p=readParams();
+  const out=runSimulation(p);
+  render(out.results,out.log);
+}
+
+document.getElementById("run-btn").addEventListener("click",doRun);
+
+document.getElementById("reset-btn").addEventListener("click",()=>{
+  document.getElementById("in-tp").value="25";
+  document.getElementById("in-cc").value="250";
+  document.getElementById("in-nunits").value="50";
+  document.getElementById("in-nconv").value="10";
+  document.getElementById("in-switch").value="6";
+  document.getElementById("in-seed").value="1";
+  document.getElementById("in-cpschedule").value="20.0,45.6,71.1,96.7,122.2,147.8,173.3,198.9,224.4,250.0";
+  doRun();
+});
+
+doRun();
+</script>
+</body>
+</html>
