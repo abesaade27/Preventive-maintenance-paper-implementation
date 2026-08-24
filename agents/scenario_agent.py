@@ -1,11 +1,18 @@
 """
 scenario_agent.py
-Section 4.2 / 5.1: simulates a population of assets under an age-based PM
-policy with interval Tp. Units surviving to Tp are right-censored. The true
-Weibull shape beta undergoes a regime change halfway through the run:
-Phase 1 (wear-out, beta=2.0) -> Phase 2 (infant-mortality-like, beta=0.6).
-In an industrial deployment this agent is replaced 1:1 by a CMMSDataAgent
-that reconstructs the same structure from real work-order history (Sec. 7.1).
+
+Scenario/data-generation agent.
+
+Baseline mode:
+    ScenarioAgent -> FittingAgent
+
+Proposed mode:
+    ScenarioAgent -> ChangePointAgent -> FittingAgent
+
+The baseline path is kept unchanged conceptually so that the original
+paper implementation remains a clean control. The proposed path routes
+the raw scenario only through the ChangePointAgent, whose adaptive buffer
+then supplies the fitting dataset.
 """
 import numpy as np
 from agents.base import Agent
@@ -14,18 +21,32 @@ from agents.base import Agent
 class ScenarioAgent(Agent):
     name = "ScenarioAgent"
 
-    def __init__(self, broker, n_units=200, eta_true=20.0,
-                 beta_phase1=2.0, beta_phase2=0.6, phase_switch_conv=6, seed=42):
+    def __init__(
+        self,
+        broker,
+        n_units=200,
+        eta_true=20.0,
+        beta_phase1=2.0,
+        beta_phase2=0.6,
+        phase_switch_conv=6,
+        seed=42,
+        use_change_point=False,
+    ):
         super().__init__(broker)
-        self.n_units = n_units
-        self.eta_true = eta_true
-        self.beta_phase1 = beta_phase1
-        self.beta_phase2 = beta_phase2
-        self.phase_switch_conv = phase_switch_conv
+        self.n_units = int(n_units)
+        self.eta_true = float(eta_true)
+        self.beta_phase1 = float(beta_phase1)
+        self.beta_phase2 = float(beta_phase2)
+        self.phase_switch_conv = int(phase_switch_conv)
         self.rng = np.random.default_rng(seed)
+        self.use_change_point = bool(use_change_point)
 
     def true_beta_for(self, conv_id: int) -> float:
-        return self.beta_phase1 if conv_id < self.phase_switch_conv else self.beta_phase2
+        return (
+            self.beta_phase1
+            if conv_id < self.phase_switch_conv
+            else self.beta_phase2
+        )
 
     def step(self, tick):
         for msg in self.receive():
@@ -34,8 +55,8 @@ class ScenarioAgent(Agent):
 
     def _handle_request(self, msg, tick):
         conv_id = msg.conversation_id
-        Tp = msg.payload["Tp"]
-        Cp = msg.payload["Cp"]
+        Tp = float(msg.payload["Tp"])
+        Cp = float(msg.payload["Cp"])
         beta_true = self.true_beta_for(conv_id)
 
         raw_times = self.rng.weibull(beta_true, self.n_units) * self.eta_true
@@ -51,10 +72,14 @@ class ScenarioAgent(Agent):
             "beta_true": beta_true,
             "eta_true": self.eta_true,
             "censoring_fraction": n_censored / self.n_units,
-            "phase": "Phase1" if conv_id < self.phase_switch_conv else "Phase 2",
+            "phase": "Phase 1" if conv_id < self.phase_switch_conv else "Phase 2",
+            "n_units": self.n_units,
+            "regime_id": 1 if conv_id < self.phase_switch_conv else 2,
         }
 
-        # before:
-        self.send("SCENARIO", "FittingAgent", conv_id, payload, tick)
-        # after:
-        self.send("SCENARIO", "ChangePointAgent", conv_id, payload, tick)
+        # IMPORTANT:
+        # In proposed mode the raw batch must NOT also go directly to
+        # FittingAgent. Otherwise the fitter receives both the raw batch
+        # and the buffered batch, defeating the adaptive-memory design.
+        recipient = "ChangePointAgent" if self.use_change_point else "FittingAgent"
+        self.send("SCENARIO", recipient, conv_id, payload, tick)
