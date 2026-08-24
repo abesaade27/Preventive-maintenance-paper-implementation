@@ -1,39 +1,20 @@
 """
 change_point_agent.py
-PROPOSED ENHANCEMENT (not part of the original paper).
 
-Sits between the ScenarioAgent and the FittingAgent. Implements two things:
+Proposed research enhancement:
+    Change-Point-Gated Adaptive Memory.
 
-1. Adaptive Memory Buffer
-   Instead of the FittingAgent re-estimating beta/eta from only the latest
-   200-unit batch (as in the original paper), this agent accumulates
-   (failure_times, censor_times) across conversations while the operating
-   regime looks stable, and forwards the POOLED dataset downstream. This
-   directly reduces MLE variance, since more data -> tighter estimates.
+For each new scenario batch:
+1. Test whether the new batch is statistically different from the current
+   memory buffer using a likelihood-ratio test on censored Weibull data.
+2. If no change is detected, append the new observations to the buffer.
+3. If a change is detected, discard stale pre-change observations and start
+   a new regime buffer using the new batch.
+4. Forward ONLY the resulting adaptive-memory dataset to FittingAgent.
 
-2. Change-Point Detection (likelihood-ratio test on RAW survival data)
-   Detecting a regime shift by watching beta_hat directly is unreliable,
-   because beta_hat is itself a noisy point estimate. Instead, this agent
-   compares two hypotheses on the raw pooled data:
-
-       H0 (no change): buffer + new batch share ONE Weibull(beta, eta)
-       H1 (change)   : buffer and new batch are TWO DIFFERENT Weibull
-                        distributions
-
-   via a likelihood-ratio (LR) test:
-       LR = 2 * [ (loglik_buffer_alone + loglik_new_alone) - loglik_pooled ]
-   Under H0, LR ~ chi-square with df = 2. A large LR favours H1 -> a
-   genuine regime change is declared, the buffer is discarded, and
-   estimation restarts fresh from the new batch only.
-
-Integration notes:
-  - Forwards a "SCENARIO" message (same schema FittingAgent expects), so
-    FittingAgent needs ZERO code changes.
-  - weibull_censored_mle() already tolerates heterogeneous per-observation
-    censor times, so pooling data across conversations with different Tp
-    values is statistically valid -- no special handling required.
-  - Only external change needed: one line in scenario_agent.py, routing
-    SCENARIO to "ChangePointAgent" instead of "FittingAgent".
+The implementation keeps failure/censor observations as individual records
+so a buffer cap removes the oldest observations without separately truncating
+the failure and censor arrays.
 """
 import numpy as np
 from scipy import stats
@@ -45,19 +26,46 @@ from reliability import weibull_censored_mle
 class ChangePointAgent(Agent):
     name = "ChangePointAgent"
 
-    def __init__(self, broker, alpha=0.01, min_buffer_batches=1, max_buffer_size=None):
+    def __init__(
+        self,
+        broker,
+        alpha=0.01,
+        min_buffer_batches=1,
+        max_buffer_size=None,
+        reset_on_change=True,
+    ):
         super().__init__(broker)
-        self.alpha = alpha
-        self.min_buffer_batches = min_buffer_batches
-        self.max_buffer_size = max_buffer_size
-        self.chi2_crit = stats.chi2.ppf(1 - alpha, df=2)
 
-        # --- Adaptive Memory Buffer state ---
-        self.buffer_failures = []
-        self.buffer_censors = []
+        self.alpha = float(alpha)
+        self.min_buffer_batches = int(min_buffer_batches)
+        self.max_buffer_size = (
+            None if max_buffer_size is None else int(max_buffer_size)
+        )
+        self.reset_on_change = bool(reset_on_change)
+
+        # LR has df=2 because H1 estimates two additional Weibull parameters.
+        self.chi2_crit = float(stats.chi2.ppf(1.0 - self.alpha, df=2))
+
+        # Each record is {"time": float, "event": 1 failure / 0 censored}.
+        self.buffer = []
         self.buffer_batches = 0
+        self.regime_id = 0
 
-        # --- Audit trail (feeds the "detection delay" metric) ---
+        # Full audit trail for experiments/dashboard.
+        self.change_log = []
+
+    @property
+    def buffer_failures(self):
+        return [r["time"] for r in self.buffer if r["event"] == 1]
+
+    @property
+    def buffer_censors(self):
+        return [r["time"] for r in self.buffer if r["event"] == 0]
+
+    def reset(self):
+        self.buffer = []
+        self.buffer_batches = 0
+        self.regime_id = 0
         self.change_log = []
 
     def step(self, tick):
@@ -65,61 +73,107 @@ class ChangePointAgent(Agent):
             if msg.msg_type == "SCENARIO":
                 self._handle_scenario(msg, tick)
 
+    def _batch_to_records(self, failures, censors):
+        records = (
+            [{"time": float(t), "event": 1} for t in failures]
+            + [{"time": float(t), "event": 0} for t in censors]
+        )
+        return records
+
+    def _records_to_arrays(self, records):
+        failures = np.asarray(
+            [r["time"] for r in records if r["event"] == 1],
+            dtype=float,
+        )
+        censors = np.asarray(
+            [r["time"] for r in records if r["event"] == 0],
+            dtype=float,
+        )
+        return failures, censors
+
     def _handle_scenario(self, msg, tick):
         p = msg.payload
-        new_failures = np.array(p["failure_times"], dtype=float)
-        new_censors = np.array(p["censor_times"], dtype=float)
+        new_failures = np.asarray(p.get("failure_times", []), dtype=float)
+        new_censors = np.asarray(p.get("censor_times", []), dtype=float)
+        new_records = self._batch_to_records(new_failures, new_censors)
 
         changed, lr_stat = self._detect_change(new_failures, new_censors)
 
-        self.change_log.append({
-            "conversation_id": msg.conversation_id,
-            "lr_stat": lr_stat,
-            "triggered": changed,
-            "buffer_batches_before": self.buffer_batches,
-        })
+        old_buffer_size = len(self.buffer)
 
-        if changed:
-            self.buffer_failures = new_failures.tolist()
-            self.buffer_censors = new_censors.tolist()
+        if changed and self.reset_on_change:
+            self.buffer = list(new_records)
             self.buffer_batches = 1
+            self.regime_id += 1
         else:
-            self.buffer_failures.extend(new_failures.tolist())
-            self.buffer_censors.extend(new_censors.tolist())
+            self.buffer.extend(new_records)
             self.buffer_batches += 1
             self._enforce_cap()
 
-        n_total = len(self.buffer_failures) + len(self.buffer_censors)
-        payload = dict(p)
-        payload["failure_times"] = list(self.buffer_failures)
-        payload["censor_times"] = list(self.buffer_censors)
-        payload["censoring_fraction"] = (
-            len(self.buffer_censors) / n_total if n_total else 0.0
-        )
-        payload["buffer_batches"] = self.buffer_batches
-        payload["change_detected"] = changed
-        payload["lr_stat"] = lr_stat
+        if self.regime_id == 0:
+            self.regime_id = 1
 
-        self.send("SCENARIO", "FittingAgent", msg.conversation_id, payload, tick)
+        failures, censors = self._records_to_arrays(self.buffer)
+        n_total = len(failures) + len(censors)
+
+        detection_record = {
+            "conversation_id": msg.conversation_id,
+            "lr_stat": float(lr_stat),
+            "critical_value": self.chi2_crit,
+            "triggered": bool(changed),
+            "buffer_size_before": old_buffer_size,
+            "buffer_size_after": len(self.buffer),
+            "buffer_batches": self.buffer_batches,
+            "regime_id": self.regime_id,
+            "new_failures": len(new_failures),
+            "new_censored": len(new_censors),
+        }
+        self.change_log.append(detection_record)
+
+        payload = dict(p)
+        payload["failure_times"] = failures.tolist()
+        payload["censor_times"] = censors.tolist()
+        payload["censoring_fraction"] = (
+            len(censors) / n_total if n_total else 0.0
+        )
+        payload["buffer_size"] = len(self.buffer)
+        payload["buffer_batches"] = self.buffer_batches
+        payload["change_detected"] = bool(changed)
+        payload["change_point_lr"] = float(lr_stat)
+        payload["change_point_critical"] = self.chi2_crit
+        payload["regime_id"] = self.regime_id
+
+        # This is the ONLY downstream path in proposed mode.
+        self.send(
+            "SCENARIO",
+            "FittingAgent",
+            msg.conversation_id,
+            payload,
+            tick,
+        )
 
     def _detect_change(self, new_failures, new_censors):
-        if self.buffer_batches < self.min_buffer_batches or len(self.buffer_failures) < 2:
-            return False, 0.0
-        if len(new_failures) < 2:
+        # No historical regime exists yet.
+        if self.buffer_batches < self.min_buffer_batches:
             return False, 0.0
 
-        buf_f = np.array(self.buffer_failures)
-        buf_c = np.array(self.buffer_censors)
+        # A very small sample cannot support a meaningful two-model comparison.
+        if len(self.buffer_failures) < 2 or len(new_failures) < 2:
+            return False, 0.0
+
+        buf_f, buf_c = self._records_to_arrays(self.buffer)
 
         try:
             _, _, ll_buf = weibull_censored_mle(buf_f, buf_c)
             _, _, ll_new = weibull_censored_mle(new_failures, new_censors)
         except Exception:
             return False, 0.0
+
         ll_h1 = ll_buf + ll_new
 
         pooled_f = np.concatenate([buf_f, new_failures])
         pooled_c = np.concatenate([buf_c, new_censors])
+
         try:
             _, _, ll_h0 = weibull_censored_mle(pooled_f, pooled_c)
         except Exception:
@@ -127,16 +181,16 @@ class ChangePointAgent(Agent):
 
         lr_stat = max(2.0 * (ll_h1 - ll_h0), 0.0)
         changed = lr_stat > self.chi2_crit
-        return changed, float(lr_stat)
+        return bool(changed), float(lr_stat)
 
     def _enforce_cap(self):
         if self.max_buffer_size is None:
             return
-        excess = len(self.buffer_failures) + len(self.buffer_censors) - self.max_buffer_size
-        if excess <= 0:
-            return
-        n_drop_f = min(excess, len(self.buffer_failures))
-        self.buffer_failures = self.buffer_failures[n_drop_f:]
-        remaining = excess - n_drop_f
-        if remaining > 0:
-            self.buffer_censors = self.buffer_censors[remaining:]
+
+        if self.max_buffer_size < 1:
+            raise ValueError("max_buffer_size must be >= 1 or None.")
+
+        excess = len(self.buffer) - self.max_buffer_size
+        if excess > 0:
+            # Remove oldest observations first.
+            del self.buffer[:excess]
